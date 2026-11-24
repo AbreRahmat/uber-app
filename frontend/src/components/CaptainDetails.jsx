@@ -1,6 +1,5 @@
-
-import React, { useContext } from 'react'
-import { CaptainDataContext } from '../context/CapatainContext'
+import { useContext } from 'react'
+import { CaptainDataContext } from '../context/CaptainContext'
 
 const CaptainDetails = () => {
 
@@ -21,18 +20,18 @@ const CaptainDetails = () => {
             <div className='flex p-3 mt-8 bg-gray-100 rounded-xl justify-center gap-5 items-start'>
                 <div className='text-center'>
                     <i className="text-3xl mb-2 font-thin ri-timer-2-line"></i>
-                    <h5 className='text-lg font-medium'>10.2</h5>
+                    <h5 className='text-lg font-medium'>2.1</h5>
                     <p className='text-sm text-gray-600'>Hours Online</p>
                 </div>
                 <div className='text-center'>
                     <i className="text-3xl mb-2 font-thin ri-speed-up-line"></i>
-                    <h5 className='text-lg font-medium'>10.2</h5>
-                    <p className='text-sm text-gray-600'>Hours Online</p>
+                    <h5 className='text-lg font-medium'>4</h5>
+                    <p className='text-sm text-gray-600'>Rides Completed</p>
                 </div>
                 <div className='text-center'>
                     <i className="text-3xl mb-2 font-thin ri-booklet-line"></i>
-                    <h5 className='text-lg font-medium'>10.2</h5>
-                    <p className='text-sm text-gray-600'>Hours Online</p>
+                    <h5 className='text-lg font-medium'>295.20</h5>
+                    <p className='text-sm text-gray-600'>Earnings</p>
                 </div>
 
             </div>

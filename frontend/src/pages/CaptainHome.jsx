@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import CaptainDetails from '../components/CaptainDetails'
 import RidePopUp from '../components/RidePopUp'
@@ -7,7 +7,7 @@ import gsap from 'gsap'
 import ConfirmRidePopUp from '../components/ConfirmRidePopUp'
 import { useEffect, useContext } from 'react'
 import { SocketContext } from '../context/SocketContext'
-import { CaptainDataContext } from '../context/CapatainContext'
+import { CaptainDataContext } from '../context/CaptainContext'
 import axios from 'axios'
 
 const CaptainHome = () => {
@@ -23,10 +23,8 @@ const CaptainHome = () => {
     const { captain } = useContext(CaptainDataContext)
 
     useEffect(() => {
-        socket.emit('join', {
-            userId: captain._id,
-            userType: 'captain'
-        })
+        if (!socket || !captain?._id) return
+
         const updateLocation = () => {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(position => {
@@ -42,36 +40,53 @@ const CaptainHome = () => {
             }
         }
 
+        const registerCaptain = () => {
+            socket.emit('join', {
+                userId: captain._id,
+                userType: 'captain'
+            })
+            updateLocation()
+        }
+
         const locationInterval = setInterval(updateLocation, 10000)
-        updateLocation()
+        registerCaptain()
 
-        // return () => clearInterval(locationInterval)
-    }, [])
+        const handleNewRide = (data) => {
+            setRide(data)
+            setRidePopupPanel(true)
+        }
 
-    socket.on('new-ride', (data) => {
+        socket.on('new-ride', handleNewRide)
+        socket.on('connect', registerCaptain)
 
-        setRide(data)
-        setRidePopupPanel(true)
-
-    })
+        return () => {
+            clearInterval(locationInterval)
+            socket.off('new-ride', handleNewRide)
+            socket.off('connect', registerCaptain)
+        }
+    }, [socket, captain?._id])
 
     async function confirmRide() {
+        if (!ride?._id || !captain?._id) return false
 
-        const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/rides/confirm`, {
+        try {
+            const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/rides/confirm`, {
+                rideId: ride._id,
+                captainId: captain._id
+            }, {
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('captainToken') || localStorage.getItem('token')}`
+                }
+            })
 
-            rideId: ride._id,
-            captainId: captain._id,
-
-
-        }, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`
-            }
-        })
-
-        setRidePopupPanel(false)
-        setConfirmRidePopupPanel(true)
-
+            setRide(response.data)
+            setRidePopupPanel(false)
+            setConfirmRidePopupPanel(true)
+            return true
+        } catch (error) {
+            console.error('Unable to accept ride:', error)
+            return false
+        }
     }
 
 

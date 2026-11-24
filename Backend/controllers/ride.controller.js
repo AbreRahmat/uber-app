@@ -3,6 +3,7 @@ const { validationResult } = require('express-validator');
 const mapService = require('../services/maps.service');
 const { sendMessageToSocketId } = require('../socket');
 const rideModel = require('../models/ride.model');
+const captainModel = require('../models/captain.model');
 
 
 module.exports.createRide = async (req, res) => {
@@ -11,30 +12,53 @@ module.exports.createRide = async (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { userId, pickup, destination, vehicleType } = req.body;
+    if (!req.user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { pickup, destination, vehicleType } = req.body;
 
     try {
         const ride = await rideService.createRide({ user: req.user._id, pickup, destination, vehicleType });
-        res.status(201).json(ride);
-
-        const pickupCoordinates = await mapService.getAddressCoordinate(pickup);
-
-
-
-        const captainsInRadius = await mapService.getCaptainsInTheRadius(pickupCoordinates.ltd, pickupCoordinates.lng, 2);
-
         ride.otp = ""
 
-        const rideWithUser = await rideModel.findOne({ _id: ride._id }).populate('user');
+        try {
+            const pickupCoordinates = await mapService.getAddressCoordinate(pickup);
+            const captainsInRadius = await mapService.getCaptainsInTheRadius(pickupCoordinates.ltd, pickupCoordinates.lng, 2);
+            const rideWithUser = await rideModel.findOne({ _id: ride._id }).populate('user');
 
-        captainsInRadius.map(captain => {
+            let captainsToNotify = captainsInRadius;
+            if (!captainsToNotify.length) {
+                captainsToNotify = await captainModel.find({ socketId: { $exists: true, $ne: null } });
+            }
 
-            sendMessageToSocketId(captain.socketId, {
-                event: 'new-ride',
-                data: rideWithUser
+            captainsToNotify.forEach(captain => {
+                if (captain.socketId) {
+                    sendMessageToSocketId(captain.socketId, {
+                        event: 'new-ride',
+                        data: rideWithUser
+                    })
+                }
             })
+        } catch (notificationError) {
+            console.error('Ride created, but captain notification failed:', notificationError.message);
+            try {
+                const rideWithUser = await rideModel.findOne({ _id: ride._id }).populate('user');
+                const connectedCaptains = await captainModel.find({ socketId: { $exists: true, $ne: null } });
+                connectedCaptains.forEach(captain => {
+                    if (captain.socketId) {
+                        sendMessageToSocketId(captain.socketId, {
+                            event: 'new-ride',
+                            data: rideWithUser
+                        })
+                    }
+                })
+            } catch (fallbackError) {
+                console.error('Ride captain notification fallback failed:', fallbackError.message);
+            }
+        }
 
-        })
+        return res.status(201).json(ride);
 
     } catch (err) {
 

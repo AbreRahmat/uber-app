@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import  { useEffect, useRef, useState } from 'react'
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import axios from 'axios';
@@ -41,31 +41,46 @@ const Home = () => {
     const { user } = useContext(UserDataContext)
 
     useEffect(() => {
+        if (!socket || !user?._id) return
+
         socket.emit("join", { userType: "user", userId: user._id })
-    }, [ user ])
+    }, [ socket, user ])
 
-    socket.on('ride-confirmed', ride => {
+    useEffect(() => {
+        if (!socket) return
 
+        const handleRideConfirmed = (ride) => {
+            setVehicleFound(false)
+            setWaitingForDriver(true)
+            setRide(ride)
+        }
 
-        setVehicleFound(false)
-        setWaitingForDriver(true)
-        setRide(ride)
-    })
+        const handleRideStarted = (ride) => {
+            setWaitingForDriver(false)
+            navigate('/riding', { state: { ride } })
+        }
 
-    socket.on('ride-started', ride => {
-        console.log("ride")
-        setWaitingForDriver(false)
-        navigate('/riding', { state: { ride } }) // Updated navigate to include ride data
-    })
+        socket.on('ride-confirmed', handleRideConfirmed)
+        socket.on('ride-started', handleRideStarted)
+
+        return () => {
+            socket.off('ride-confirmed', handleRideConfirmed)
+            socket.off('ride-started', handleRideStarted)
+        }
+    }, [ socket, navigate ])
 
 
     const handlePickupChange = async (e) => {
         setPickup(e.target.value)
+        if (e.target.value.trim().length < 3) {
+            setPickupSuggestions([])
+            return
+        }
         try {
             const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/maps/get-suggestions`, {
                 params: { input: e.target.value },
                 headers: {
-                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                    Authorization: `Bearer ${localStorage.getItem('userToken') || localStorage.getItem('token')}`
                 }
 
             })
@@ -77,11 +92,15 @@ const Home = () => {
 
     const handleDestinationChange = async (e) => {
         setDestination(e.target.value)
+        if (e.target.value.trim().length < 3) {
+            setDestinationSuggestions([])
+            return
+        }
         try {
             const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/maps/get-suggestions`, {
                 params: { input: e.target.value },
                 headers: {
-                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                    Authorization: `Bearer ${localStorage.getItem('userToken') || localStorage.getItem('token')}`
                 }
             })
             setDestinationSuggestions(response.data)
@@ -98,7 +117,8 @@ const Home = () => {
         if (panelOpen) {
             gsap.to(panelRef.current, {
                 height: '70%',
-                padding: 24
+                padding: 24,
+                overflowY: 'auto'
                 // opacity:1
             })
             gsap.to(panelCloseRef.current, {
@@ -167,45 +187,52 @@ const Home = () => {
 
 
     async function findTrip() {
+        if (!pickup.trim() || !destination.trim()) return
+
         setVehiclePanel(true)
         setPanelOpen(false)
-
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/rides/get-fare`, {
-            params: { pickup, destination },
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`
-            }
-        })
-
-
-        setFare(response.data)
-
-
+        try {
+            const response = await axios.get(`${import.meta.env.VITE_BASE_URL}/rides/get-fare`, {
+                params: { pickup, destination },
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('userToken') || localStorage.getItem('token')}`
+                }
+            })
+            setFare(response.data)
+        } catch (error) {
+            setFare({})
+            setVehiclePanel(false)
+            console.error('Unable to calculate fare:', error)
+        }
     }
 
     async function createRide() {
-        const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/rides/create`, {
-            pickup,
-            destination,
-            vehicleType
-        }, {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`
-            }
-        })
-
-
+        try {
+            const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/rides/create`, {
+                pickup,
+                destination,
+                vehicleType
+            }, {
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('userToken') || localStorage.getItem('token')}`
+                }
+            })
+            return response.data
+        } catch (error) {
+            console.error('Unable to create ride:', error)
+            return null
+        }
     }
 
     return (
         <div className='h-screen relative overflow-hidden'>
-            <img className='w-16 absolute left-5 top-5' src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Uber_logo_2018.png" alt="" />
+            <img className='w-16 absolute left-5 top-5 z-[1001]' src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Uber_logo_2018.png" alt="" />
             <div className='h-screen w-screen'>
                 {/* image for temporary use  */}
                 <LiveTracking />
             </div>
-            <div className=' flex flex-col justify-end h-screen absolute top-0 w-full'>
-                <div className='h-[30%] p-6 bg-white relative'>
+            <div className='flex flex-col justify-end h-screen fixed bottom-0 z-[1000] w-full pointer-events-none'>
+                <div className='h-[30vh] min-h-[220px] p-6 bg-white relative pointer-events-auto'>
                     <h5 ref={panelCloseRef} onClick={() => {
                         setPanelOpen(false)
                     }} className='absolute opacity-0 right-6 top-6 text-2xl'>
@@ -244,7 +271,7 @@ const Home = () => {
                         Find Trip
                     </button>
                 </div>
-                <div ref={panelRef} className='bg-white h-0'>
+                <div ref={panelRef} className='bg-white h-0 pointer-events-auto overflow-y-auto'>
                     <LocationSearchPanel
                         suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
                         setPanelOpen={setPanelOpen}
@@ -255,12 +282,12 @@ const Home = () => {
                     />
                 </div>
             </div>
-            <div ref={vehiclePanelRef} className='fixed w-full z-10 bottom-0 translate-y-full bg-white px-3 py-10 pt-12'>
+            <div ref={vehiclePanelRef} className='fixed w-full z-[1000] bottom-0 translate-y-full bg-white px-3 py-10 pt-12'>
                 <VehiclePanel
                     selectVehicle={setVehicleType}
                     fare={fare} setConfirmRidePanel={setConfirmRidePanel} setVehiclePanel={setVehiclePanel} />
             </div>
-            <div ref={confirmRidePanelRef} className='fixed w-full z-10 bottom-0 translate-y-full bg-white px-3 py-6 pt-12'>
+            <div ref={confirmRidePanelRef} className='fixed w-full z-[1000] bottom-0 translate-y-full bg-white px-3 py-6 pt-12'>
                 <ConfirmRide
                     createRide={createRide}
                     pickup={pickup}
@@ -270,7 +297,7 @@ const Home = () => {
 
                     setConfirmRidePanel={setConfirmRidePanel} setVehicleFound={setVehicleFound} />
             </div>
-            <div ref={vehicleFoundRef} className='fixed w-full z-10 bottom-0 translate-y-full bg-white px-3 py-6 pt-12'>
+            <div ref={vehicleFoundRef} className='fixed w-full z-[1000] bottom-0 translate-y-full bg-white px-3 py-6 pt-12'>
                 <LookingForDriver
                     createRide={createRide}
                     pickup={pickup}
@@ -279,7 +306,7 @@ const Home = () => {
                     vehicleType={vehicleType}
                     setVehicleFound={setVehicleFound} />
             </div>
-            <div ref={waitingForDriverRef} className='fixed w-full  z-10 bottom-0  bg-white px-3 py-6 pt-12'>
+            <div ref={waitingForDriverRef} className='fixed w-full z-[1000] bottom-0 translate-y-full bg-white px-3 py-6 pt-12'>
                 <WaitingForDriver
                     ride={ride}
                     setVehicleFound={setVehicleFound}

@@ -6,7 +6,7 @@ import axios from 'axios'
 const UserProtectWrapper = ({
     children
 }) => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('userToken') || localStorage.getItem('token')
     const navigate = useNavigate()
     const { user, setUser } = useContext(UserDataContext)
     const [ isLoading, setIsLoading ] = useState(true)
@@ -14,6 +14,8 @@ const UserProtectWrapper = ({
     useEffect(() => {
         if (!token) {
             navigate('/login')
+            setIsLoading(false)
+            return
         }
 
         axios.get(`${import.meta.env.VITE_BASE_URL}/users/profile`, {
@@ -28,7 +30,7 @@ const UserProtectWrapper = ({
         })
             .catch(err => {
                 console.log(err)
-                localStorage.removeItem('token')
+                localStorage.removeItem('userToken')
                 navigate('/login')
             })
     }, [ token ])

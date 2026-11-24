@@ -11,6 +11,7 @@ const UserSignup = () => {
   const [ firstName, setFirstName ] = useState('')
   const [ lastName, setLastName ] = useState('')
   const [ userData, setUserData ] = useState({})
+  const [ error, setError ] = useState('')
 
   const navigate = useNavigate()
 
@@ -23,6 +24,7 @@ const UserSignup = () => {
 
   const submitHandler = async (e) => {
     e.preventDefault()
+    setError('')
     const newUser = {
       fullname: {
         firstname: firstName,
@@ -32,20 +34,23 @@ const UserSignup = () => {
       password: password
     }
 
-    const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/users/register`, newUser)
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URL}/users/register`, newUser)
 
-    if (response.status === 201) {
-      const data = response.data
-      setUser(data.user)
-      localStorage.setItem('token', data.token)
-      navigate('/home')
+      if (response.status === 201) {
+        const data = response.data
+        setUser(data.user)
+        localStorage.setItem('userToken', data.token)
+        navigate('/home')
+      }
+
+      setEmail('')
+      setFirstName('')
+      setLastName('')
+      setPassword('')
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.errors?.[0]?.msg || 'Unable to create account')
     }
-
-
-    setEmail('')
-    setFirstName('')
-    setLastName('')
-    setPassword('')
 
   }
   return (
@@ -109,6 +114,9 @@ const UserSignup = () => {
             <button
               className='bg-[#111] text-white font-semibold mb-3 rounded-lg px-4 py-2 w-full text-lg placeholder:text-base'
             >Create account</button>
+            {error && (
+              <p className='mb-3 text-center text-sm text-red-600'>{error}</p>
+            )}
 
           </form>
           <p className='text-center'>Already have a account? <Link to='/login' className='text-blue-600'>Login here</Link></p>
